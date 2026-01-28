@@ -7,33 +7,46 @@ app.use(cors());
 app.use(express.json());
 
 const HF_KEY = process.env.HF_KEY;
-const MODEL = "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill";
-
-async function callHF(prompt) {
-  const r = await fetch(MODEL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${HF_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ inputs: prompt })
-  });
-  const d = await r.json();
-  return d[0]?.generated_text || "Try again";
-}
 
 app.post("/qa", async (req, res) => {
   const { text, lang } = req.body;
-  const prompt =
-    lang === "ta"
-      ? `Answer in simple Tanglish with example:\n${text}`
-      : `Answer with explanation and example:\n${text}`;
-  res.json({ reply: await callHF(prompt) });
+
+  try {
+    const hfRes = await fetch(
+      "https://api-inference.huggingface.co/models/google/flan-t5-base",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${HF_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          inputs: text
+        })
+      }
+    );
+
+    const result = await hfRes.json();
+    console.log("HF RAW:", result);
+
+    let answer =
+      result?.[0]?.generated_text ||
+      result?.generated_text ||
+      "No answer";
+
+    res.json({ reply: answer });
+
+  } catch (err) {
+    console.error(err);
+    res.json({ reply: "Try again" });
+  }
 });
 
-app.post("/code", async (req, res) => {
-  const prompt = `Generate clean code:\n${req.body.text}`;
-  res.json({ code: await callHF(prompt) });
+app.get("/", (req, res) => {
+  res.send("Backend running");
 });
 
-app.listen(3000, () => console.log("Backend running"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Server started on", PORT);
+});
